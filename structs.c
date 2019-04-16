@@ -14,3 +14,11 @@ struct server_register{
     char num_aleatori[7];
     char dades[50];
 };
+/*Estructura PDU TCP*/
+struct server_register_tcp{
+    unsigned char tipus_paquet;
+    char nom_equip[7];
+    char mac_adress[13];
+    char num_aleatori[7];
+    char dades[150];
+};

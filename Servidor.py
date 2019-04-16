@@ -99,7 +99,6 @@ def ttl_alive(client):
 def check_register(data, addr, client, server_config, sock):
 
     if client.accepted==True:
-        debuger("Client valid")
         if client.estat=="DISCONNECTED":
             if data.num_aleatori=="000000" and data.nom_equip==client.nom and data.mac_address==client.mac:
                 debuger("Les dades concorden, enviant REGISTER_ACK")
@@ -116,7 +115,7 @@ def check_register(data, addr, client, server_config, sock):
                 t.start()
             else:
                 debuger("Les dades no concorden, enviant REGISTER_NACK")
-                data=POINT(tipus_paquet=0x02, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="0000000", dades="Error en el nombre aleatori")
+                data=POINT(tipus_paquet=0x02, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Error en eles dades")
                 sock.sendto(data, addr)
         else:
             if data.num_aleatori==client.aleatori and data.nom_equip==client.nom and data.mac_address==client.mac and addr[0]==client.ip:
@@ -125,11 +124,11 @@ def check_register(data, addr, client, server_config, sock):
                 sock.sendto(data,addr)
             else:
                 debuger("Les dades no concorden, enviant REGISTER_NACK")
-                data=POINT(tipus_paquet=0x02, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="0000000", dades="Error en el nombre aleatori")
+                data=POINT(tipus_paquet=0x02, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Error en les dades")
                 sock.sendto(data,addr)
     else:
         debuger("Client no valid")
-        data=POINT(tipus_paquet=0x03, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="0000000", dades="Equip no autoritzat")
+        data=POINT(tipus_paquet=0x03, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Equip no autoritzat")
         sock.sendto(data,addr)
         client.estat="DISCONNECTED"
 
@@ -148,15 +147,15 @@ def check_alive(data, addr, client, server_config, sock):
                 t.start()
             else:
                 debuger("Les dades no concorden, enviant ALIVE_NACK")
-                data=POINT(tipus_paquet=0x12, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="0000000", dades="Error en el nombre aleatori")
+                data=POINT(tipus_paquet=0x12, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Error en el nombre aleatori")
                 sock.sendto(data,addr)
         else:
-            data=POINT(tipus_paquet=0x13, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="0000000", dades="Equip no autoritzat")
+            data=POINT(tipus_paquet=0x13, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Equip no autoritzat")
             sock.sendto(data,addr)
             client.estat="DISCONNECTED"
     else:
         debuger("Client no autoritzat, enviant ALIVE_REJ")
-        data=POINT(tipus_paquet=0x13, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="0000000", dades="Client no autoritzat")
+        data=POINT(tipus_paquet=0x13, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Client no autoritzat")
         sock.sendto(data,addr)
         
 def listen(clients):
