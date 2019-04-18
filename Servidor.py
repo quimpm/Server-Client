@@ -11,14 +11,16 @@ from ctypes import *
 from random import randint
 import time
 import os
+import argparse
 
 x=0
 j=2
 k=3
 w=4
 
+
 def server_configuration():
-    fitxer_configuracio=open("server.cfg", "r")
+    fitxer_configuracio=open(nom_fitxer_serv, "r")
 
     server_config_dades=[]
     for line in fitxer_configuracio:
@@ -37,7 +39,7 @@ def server_configuration():
     
 def get_clients_autoritzats():
 
-    fitxer_clients = open("equips.dat", "r")
+    fitxer_clients = open(equips_aut, "r")
     llista_clients=[]
     for line in fitxer_clients:
         client=Client(line.split()[0],line.split()[1],"DISCONNECTED","000000","",False,0,False)
@@ -54,9 +56,10 @@ def data_treatment_tcp(data_struct_tcp):
     return data
 
 def debuger(msg):
-    now = datetime.datetime.now()
-    time = now.strftime("%H:%M:%S")
-    print(time+" DEBUG => "+msg)
+    if debug==True:
+        now = datetime.datetime.now()
+        time = now.strftime("%H:%M:%S")
+        print(time+" DEBUG => "+msg)
 
 def reply(data, addr, clients, server_config, sock):
 
@@ -118,6 +121,7 @@ def check_register(data, addr, client, server_config, sock):
                 client.estat="REGISTERED"
                 client.ip=addr[0]
                 t=threading.Thread(target=ttl_registered, args=(client,))
+                t.daemon=True
                 t.start()
             else:
                 debuger("Les dades no concorden, enviant REGISTER_NACK")
@@ -149,6 +153,7 @@ def check_alive(data, addr, client, server_config, sock):
                 sock.sendto(data, addr)
                 client.estat="ALIVE"
                 t=threading.Thread(target=ttl_alive, args=(client,))
+                t.daemon=True
                 t.start()
             else:
                 debuger("Les dades no concorden, enviant ALIVE_NACK")
@@ -174,6 +179,8 @@ def listen(clients):
             quit = True
         else:
             debuger("Comanda incorrecta")
+    sock.close()
+    sock_tcp.close()
     os._exit(1)
     
 def make_list(clients):
@@ -221,23 +228,30 @@ def reply_tcp(sock_tcp,clients,server_config):
     data_struct_tcp=data_treatment_tcp(data_struct_tcp)
     #Comprovem que sigui un client autoritzat
     client=check_client(data_struct_tcp,clients)
-
-    if(client.accepted==True and client.tcp_active==False):
-        client.tcp_active==True
-        check_tcp_pdu(data_struct_tcp,client,client_tcp,server_config,addr_tcp,sock_tcp)
-        return 0
+    if client.accepted==True:
+        if client.tcp_active==False:
+            client.tcp_active==True
+            check_tcp_pdu(data_struct_tcp,client,client_tcp,server_config,addr_tcp,sock_tcp)
+            client.tcp_active==False
+        else:
+            if(data_struct_tcp.tipus_paquet==0x20):
+                print(data_struct_tcp.nom_equip)
+                print(data_struct_tcp.mac_address)
+                debuger("Enviat SEND_NACK, aquest client ja té el port tcp actiu")
+                data_send_tcp=POINT_TCP(tipus_paquet=0x22, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
+                client_tcp.send(data_send_tcp)
+            if(data_struct_tcp.tipus_paquet==0x30):
+                debuger("Enviat SEND_NACK, aquest client ja té el port tcp actiu")
+                data_send_tcp=POINT_TCP(tipus_paquet=0x32, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
+                client_tcp.send(data_send_tcp)
+            client_tcp.close()
     else:
-        if(data_struct_tcp.tipus_paquet==0x20):
-            debuger("Enviat SEND_NACK, aquest client ja té el port tcp actiu")
-            data_send_tcp=POINT_TCP(tipus_paquet=0x22, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
-            client_tcp.send(data_send_tcp)
-        if(data_struct_tcp.tipus_paquet==0x30):
-            debuger("Enviat SEND_NACK, aquest client ja té el port tcp actiu")
-            data_send_tcp=POINT_TCP(tipus_paquet=0x32, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
-            client_tcp.send(data_send_tcp)
-
-        return 0
-        
+        debuger("Dades principals errònies")
+        data_send_tcp=POINT_TCP(tipus_paquet=0x23, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades principals errònies")
+        client_tcp.send(data_send_tcp)
+        debuger("Enviar SEND_REJ")
+        client_tcp.close()
+    return 0
 
 def check_tcp_pdu(data_struct_tcp,client,client_tcp,server_config,addr_tcp,sock_tcp):
     if(data_struct_tcp.tipus_paquet==0x20):
@@ -266,11 +280,13 @@ def check_send_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp,soc
             data_send_tcp=POINT_TCP(tipus_paquet=0x22, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
             client_tcp.send(data_send_tcp)
             debuger("Enviat SEND_NACK")
+            client_tcp.close()
     else:
         debuger("Dades principals errònies")
         data_send_tcp=POINT_TCP(tipus_paquet=0x23, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades principals errònies")
         client_tcp.send(data_send_tcp)
         debuger("Enviar SEND_REJ")
+        client_tcp.close()
 
 def check_get_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp):
 
@@ -291,19 +307,40 @@ def check_get_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp):
                 data_send_tcp=POINT_TCP(tipus_paquet=0x33, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades principals errònies")
                 client_tcp.send(data_send_tcp)
                 debuger("Enviar SEND_REJ")
+                client_tcp.close()
         else:
             debuger("Dades addiccional errònies ")
             data_send_tcp=POINT_TCP(tipus_paquet=0x32, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
             client_tcp.send(data_send_tcp)
             debuger("Enviat SEND_NACK")
+            client_tcp.close()
     else:
         debuger("Dades principals errònies")
         data_send_tcp=POINT_TCP(tipus_paquet=0x33, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades principals errònies")
         client_tcp.send(data_send_tcp)
         debuger("Enviar SEND_REJ")
+        client_tcp.close()
         
 
 if __name__=='__main__':
+    #Tractament dels arguments pasats amb la crida del programa
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', action='store', dest='nom_fitxer_serv', default="server.cfg",
+                        help='Nom del fitxer de configuraciód el servidor')
+
+    parser.add_argument('-u', action='store', dest='equips_aut', default="equips.dat",
+                        help='Nom fitxer amb els equips autoritzats')
+
+    parser.add_argument('-d', action='store_true', default=False,
+                        dest='debug',
+                        help='Debuger')
+    results = parser.parse_args()
+    
+    
+    nom_fitxer_serv=str(results.nom_fitxer_serv)
+    debug=results.debug
+    equips_aut=str(results.equips_aut)
+
     debuger("Inici del servidor")
     server_config=server_configuration()
     clients=get_clients_autoritzats()
