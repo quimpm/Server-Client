@@ -22,18 +22,18 @@ struct server_register registre(int sock, struct server_register register_req, s
 struct server_register register_protocol(int sock, struct server_register register_req, struct sockaddr_in addr_server,char *argv[]);
 void debuger(char debug_message [100]);
 struct server_register alive_protocol (int sock, struct server_register register_response, struct sockaddr_in	addr_server, struct config_client info_client);
-void alive (int sock, struct server_register register_response, struct sockaddr_in	addr_server, struct config_client info_client, int fdr[2],int sock_tcp,char buffer[20],int fd[2],
-            struct server_register_tcp tcp_pdu, struct sockaddr_in addr_server_tcp, int size_buffer);
-void quit(char buffer[20], int fd[2], struct timeval read_timeout, fd_set rfds,int buffer_size, int sock,int sock_tcp);
-void console_listener(char buffer[20], int fd[2], int fdr[2], struct timeval read_timeout,int buffer_size, struct server_register_tcp tcp_pdu, int sock_tcp, 
-                        struct server_register register_response, struct config_client info_client, struct sockaddr_in addr_server_tcp, int size_fitxer);
+void alive (int sock, struct server_register register_response, struct sockaddr_in	addr_server, struct config_client info_client, int fdr[2],char buffer[20],int fd[2],
+            int size_buffer);
+void quit(char buffer[20], int fd[2], struct timeval read_timeout, fd_set rfds,int buffer_size, int sock);
+void console_listener(char buffer[20], int fd[2], int fdr[2], struct timeval read_timeout,int buffer_size,
+                        struct server_register register_response, struct config_client info_client, int size_fitxer);
 void get_parameters(int argc, char *argv[]);
 void socket_bind(int sock, char *argv[],struct sockaddr_in addr_cli);
 struct sockaddr_in info_server(struct config_client info_client,struct sockaddr_in	addr_server, int sock);
 void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_register register_response, struct config_client info_client, 
-                struct sockaddr_in addr_server_tcp, int size_fitxer);
+                int size_fitxer);
 void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_register register_response, struct config_client info_client, 
-                struct sockaddr_in addr_server_tcp, int size_fitxer);
+                int size_fitxer);
 
 #define h_addr h_addr_list[0]
 #define t	2
@@ -60,10 +60,9 @@ int main(int argc, char *argv[]){
     struct config_client info_client;
     FILE  *fitxer_config = NULL;
     struct server_register register_req, register_response;
-    int sock, fd[2], fdr[2], sock_tcp;
-    struct sockaddr_in	addr_server,addr_cli, addr_server_tcp;/*Estructura d'adreça del client i del servidor.*/
+    int sock, fd[2], fdr[2];
+    struct sockaddr_in	addr_server,addr_cli;/*Estructura d'adreça del client i del servidor.*/
     struct timeval read_timeout;
-    struct server_register_tcp tcp_pdu;
     fd_set rfds;
     debuger("Inici del client");
     strcpy(estat, "DISCONNECTED");
@@ -90,25 +89,17 @@ int main(int argc, char *argv[]){
     addr_server=info_server(info_client,addr_server,sock);
 
     /*Creem procés fill per a llegir continuament de la consola*/
-        
-    sock_tcp=socket(AF_INET,SOCK_STREAM,0);
-    if(sock_tcp<0)
-    {
-        fprintf(stderr,"No puc obrir socket!!!\n");
-        perror(argv[0]);
-        exit(-1);
-    }
 
     while(1)
     {
-            quit(buffer,fd,read_timeout,rfds,sizeof(buffer),sock,sock_tcp);
+            quit(buffer,fd,read_timeout,rfds,sizeof(buffer),sock);
             if(strcmp(estat,"DISCONNECTED")==0)
             {
                 register_response = registre(sock, register_req, addr_server, argv, info_client,fdr);
             }
             if(strcmp(estat,"REGISTERED")==0 || strcmp(estat,"ALIVE")==0)
             {
-                alive(sock,register_response,addr_server,info_client,fdr,sock_tcp,buffer,fd,tcp_pdu,addr_server_tcp,sizeof(buffer)); 
+                alive(sock,register_response,addr_server,info_client,fdr,buffer,fd,sizeof(buffer)); 
             } 
     }
     return 0;
@@ -346,8 +337,8 @@ struct server_register register_protocol(int sock, struct server_register regist
 }
 
 /*Tractament enviament alive*/
-void alive (int sock, struct server_register register_response, struct sockaddr_in	addr_server, struct config_client info_client, int fdr[2],int sock_tcp,char buffer[20],int fd[2],
-            struct server_register_tcp tcp_pdu, struct sockaddr_in addr_server_tcp, int size_buffer)
+void alive (int sock, struct server_register register_response, struct sockaddr_in	addr_server, struct config_client info_client, int fdr[2],char buffer[20],int fd[2],
+            int size_buffer)
 {       
     struct server_register alive_inf;
     struct timeval read_timeout;
@@ -356,10 +347,11 @@ void alive (int sock, struct server_register register_response, struct sockaddr_
 
         if(strcmp(alive_inf.mac_adress,register_response.mac_adress)==0 && strcmp(alive_inf.nom_equip,register_response.nom_equip)==0 && alive_inf.tipus_paquet == 0x11)
         {
+            /*Mirem si és el primer alive per a iniciar la consola*/
             if(strcmp(estat,"REGISTERED")==0){
                 if (fork()==0)
                 {
-                    console_listener(buffer,fd,fdr,read_timeout,size_buffer,tcp_pdu,sock_tcp,register_response,info_client,addr_server_tcp, sizeof(nom_fitxer_tcp));   
+                    console_listener(buffer,fd,fdr,read_timeout,size_buffer,register_response,info_client, sizeof(nom_fitxer_tcp));   
                 }
             }
             strcpy(estat,"ALIVE");
@@ -387,7 +379,7 @@ void alive (int sock, struct server_register register_response, struct sockaddr_
             consecutive_alive=0;
         }
 }
-
+/*Capa inferior del protocol d'enviament d'alives*/
 struct server_register alive_protocol (int sock, struct server_register register_response, struct sockaddr_in	addr_server, struct config_client info_client)
 {
     struct server_register alive_inf;
@@ -445,12 +437,21 @@ void debuger(char debug_message [100])
 }
 
 /*Consola concurrent d'es d'on llegirem comandes*/
-void console_listener(char buffer[20], int fd[2], int fdr[2], struct timeval read_timeout,int buffer_size, struct server_register_tcp tcp_pdu, int sock_tcp, 
-                        struct server_register register_response, struct config_client info_client, struct sockaddr_in addr_server_tcp, int size_fitxer){
+void console_listener(char buffer[20], int fd[2], int fdr[2], struct timeval read_timeout,int buffer_size, 
+                        struct server_register register_response, struct config_client info_client, int size_fitxer){
+    int sock_tcp;
+    struct server_register_tcp tcp_pdu;
     fd_set rfds;
     close(fd[0]);
     
     while(1){
+        /*Obertura del socket tcp*/
+        sock_tcp=socket(AF_INET,SOCK_STREAM,0);
+        if(sock_tcp<0)
+        {
+            fprintf(stderr,"No puc obrir socket!!!\n");
+                    exit(-1);
+        }
         memset(buffer,0,buffer_size);
         read_timeout.tv_sec = 0;
         read_timeout.tv_usec = 0;
@@ -472,10 +473,10 @@ void console_listener(char buffer[20], int fd[2], int fdr[2], struct timeval rea
                 exit(0);
             }else if(strcmp(buffer,"send-conf\n")==0)
             {
-                send_conf(tcp_pdu,sock_tcp,register_response,info_client,addr_server_tcp, sizeof(nom_fitxer_tcp));
+                send_conf(tcp_pdu,sock_tcp,register_response,info_client, sizeof(nom_fitxer_tcp));
             }else if(strcmp(buffer,"get-conf\n")==0)
             {
-                get_conf(tcp_pdu,sock_tcp,register_response,info_client,addr_server_tcp, sizeof(nom_fitxer_tcp));
+                get_conf(tcp_pdu,sock_tcp,register_response,info_client, sizeof(nom_fitxer_tcp));
             }else{
                 debuger("Comanda invàlida");
             }
@@ -483,7 +484,7 @@ void console_listener(char buffer[20], int fd[2], int fdr[2], struct timeval rea
     }   
 }
 /*Tancar procés pare*/
-void quit(char buffer[20], int fd[2], struct timeval read_timeout, fd_set rfds, int buffer_size, int sock,int sock_tcp){
+void quit(char buffer[20], int fd[2], struct timeval read_timeout, fd_set rfds, int buffer_size, int sock){
     read_timeout.tv_sec = 0;
     read_timeout.tv_usec = 0;
     FD_ZERO(&rfds); 
@@ -494,7 +495,6 @@ void quit(char buffer[20], int fd[2], struct timeval read_timeout, fd_set rfds, 
         if(strcmp(buffer,"quit\n")==0)
         {
             close(sock);
-            close(sock_tcp);
             wait(NULL);
             exit(0);
         }
@@ -546,18 +546,15 @@ void socket_bind(int sock, char *argv[],struct sockaddr_in addr_cli){
 }
 /*Tractament send-conf*/
 void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_register register_response, struct config_client info_client, 
-                struct sockaddr_in addr_server_tcp, int size_fitxer){
+                 int size_fitxer){
+    struct sockaddr_in addr_server_tcp;
     char str [5], str2 [20];
     char buffer[150];
     struct timeval read_timeout;
     FILE  *fitxer_config_tcp = NULL;
     fd_set rfds;
 
-    FD_ZERO(&rfds);
-    FD_SET(sock_tcp, &rfds);
-    read_timeout.tv_sec = w;
-    read_timeout.tv_usec = 0;
-
+    /*Conectem socket*/
     memset(&addr_server_tcp, '0', sizeof(addr_server_tcp));
     addr_server_tcp.sin_family = AF_INET; 
     addr_server_tcp.sin_port = htons(atoi(register_response.dades));
@@ -573,6 +570,7 @@ void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_r
         close(sock_tcp);
         exit(-1); 
     }
+    /*Enviem SEND_CONF*/
     tcp_pdu.tipus_paquet = 0x020;
     strcpy(tcp_pdu.nom_equip,info_client.nom);
     strcpy(tcp_pdu.mac_adress,info_client.mac);
@@ -587,6 +585,11 @@ void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_r
         exit(-1);
     }
     debuger("Enviada pdu del tipus: SEND_FILE");
+    /*Esperem resposta del servidor*/
+    read_timeout.tv_sec = w;
+    read_timeout.tv_usec = 0;
+    FD_ZERO(&rfds);
+    FD_SET(sock_tcp, &rfds);
     select(sock_tcp+1, &rfds, NULL, NULL, &read_timeout);
     if(FD_ISSET(sock_tcp, &rfds))
     {
@@ -594,9 +597,8 @@ void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_r
     }else{
         close(sock_tcp);
         debuger("No s'ha rebut resposta a SEND FILE");
-        exit(0);
     }
-    
+    /*Tractem resposta rebuda*/
     if(tcp_pdu.tipus_paquet==0x21 && strcmp(tcp_pdu.nom_equip,register_response.nom_equip)==0 && strcmp(tcp_pdu.mac_adress,register_response.mac_adress)==0){
         debuger("Rebut SEND ACK, inici d'enviament del fitxer de configuració");
         fitxer_config_tcp = fopen(nom_fitxer_tcp, "r"); 
@@ -638,23 +640,20 @@ void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_r
     }else{
         debuger("No es pot enviar el fitxer de configuració");
         close(sock_tcp);
-        exit(-1);
     }
 }    
 /*Tractament get-cong*/
 void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_register register_response, struct config_client info_client, 
-                struct sockaddr_in addr_server_tcp, int size_fitxer){
-
+                 int size_fitxer){
+    
+    struct sockaddr_in addr_server_tcp;
     char str [5], str2 [20];
     struct timeval read_timeout;
     FILE  *fitxer_config_tcp = NULL;
     fd_set rfds;
 
-    FD_ZERO(&rfds);
-    FD_SET(sock_tcp, &rfds);
-    read_timeout.tv_sec = w;
-    read_timeout.tv_usec = 0;
-
+    
+    /*Conectem socket*/
     memset(&addr_server_tcp, '0', sizeof(addr_server_tcp));
     addr_server_tcp.sin_family = AF_INET; 
     addr_server_tcp.sin_port = htons(atoi(register_response.dades));
@@ -670,7 +669,7 @@ void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_re
         close(sock_tcp);
         exit(-1); 
     }
-
+    /*Enviem GET_FILE*/
     tcp_pdu.tipus_paquet = 0x030;
     strcpy(tcp_pdu.nom_equip,info_client.nom);
     strcpy(tcp_pdu.mac_adress,info_client.mac);
@@ -686,37 +685,58 @@ void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_re
     }
     debuger("Enviada pdu del tipus: GET_FILE");
     debuger("Inicia procés de rebuda i escriptura al fitxer de configuració de les dades");
-    fitxer_config_tcp = fopen(nom_fitxer_tcp, "w"); 
-    while(tcp_pdu.tipus_paquet!=0x35)
+    /*Esperem resposta del servidor*/
+    FD_ZERO(&rfds);
+    FD_SET(sock_tcp, &rfds);
+    read_timeout.tv_sec = w;
+    read_timeout.tv_usec = 0;
+    select(sock_tcp+1, &rfds, NULL, NULL, &read_timeout);
+    if(FD_ISSET(sock_tcp, &rfds))
     {
-        select(sock_tcp+1, &rfds, NULL, NULL, &read_timeout);
-        if(FD_ISSET(sock_tcp, &rfds))
-        {
-            read(sock_tcp, &tcp_pdu,sizeof(tcp_pdu));    
-        }else{
-            close(sock_tcp);
-            debuger("No s'ha rebut resposta a SEND FILE");
-            exit(0);
-        }
-        if(tcp_pdu.tipus_paquet==0x031 || tcp_pdu.tipus_paquet==0x34 || tcp_pdu.tipus_paquet==0x35)
-        {
-            if(fitxer_config_tcp == NULL)
+        read(sock_tcp+1, &tcp_pdu,sizeof(tcp_pdu));    
+    }else{
+        debuger("Passat temps màxim de resposta GET_CONF");
+        close(sock_tcp);
+    } 
+    printf("%s , %s",tcp_pdu.nom_equip,register_response.nom_equip);
+    printf("%s , %s",tcp_pdu.mac_adress,register_response.mac_adress);
+    if(strcmp(tcp_pdu.nom_equip,register_response.nom_equip)==0 && strcmp(tcp_pdu.mac_adress,register_response.mac_adress)==0){
+        if(tcp_pdu.tipus_paquet==0x31){
+            debuger("Rebut GET_ACK");
+            select(sock_tcp+1, &rfds, NULL, NULL, &read_timeout);
+            if(FD_ISSET(sock_tcp, &rfds))
             {
-                debuger("No ha sigut possible obrir l'arxiu.");
-                fclose(fitxer_config_tcp);
+                read(sock_tcp, &tcp_pdu,sizeof(tcp_pdu));    
+            }else{
+                debuger("Passat temps màxim de rebuda de GET_DATA");
                 close(sock_tcp);
-                exit(-1);
+            }
+        }
+        fitxer_config_tcp = fopen(tcp_pdu.dades, "w+");
+        while(tcp_pdu.tipus_paquet==0x34)
+        {
+            select(sock_tcp+1, &rfds, NULL, NULL, &read_timeout);
+            if(FD_ISSET(sock_tcp, &rfds))
+            {
+                read(sock_tcp, &tcp_pdu,sizeof(tcp_pdu));    
+            }else{
+                close(sock_tcp);
+                debuger("No s'ha rebut resposta a SEND FILE");
+                break;
             }
             fprintf(fitxer_config_tcp,"%s",tcp_pdu.dades);
-        }else{
-            fprintf(stderr,"No s'ha rebut de forma correcta el fitxer de configuració\n");
-            fclose(fitxer_config_tcp);
-            close(sock_tcp);
-            exit(-1);
         }
-    }
-    debuger("Fi de la rebuda i escriptura de dades");
+        if (tcp_pdu.tipus_paquet==0x33){
+            fprintf(stderr,"No s'ha rebut de forma correcta el fitxer de configuració\n");
+            close(sock_tcp);
+        }
+        if (tcp_pdu.tipus_paquet==0x35){
+            debuger("Fi de la rebuda i escriptura de dades");
+            close(sock_tcp);
+        }
+    }else{
+        debuger("Dades rebude errònies");
+        close(sock_tcp);
+    }     
     fclose(fitxer_config_tcp);
-    close(sock_tcp);
-    exit(1);
 }

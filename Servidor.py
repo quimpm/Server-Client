@@ -241,7 +241,7 @@ def reply_tcp(sock_tcp,clients,server_config):
                 data_send_tcp=POINT_TCP(tipus_paquet=0x22, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
                 client_tcp.send(data_send_tcp)
             if(data_struct_tcp.tipus_paquet==0x30):
-                debuger("Enviat SEND_NACK, aquest client ja té el port tcp actiu")
+                debuger("Enviat GET_NACK, aquest client ja té el port tcp actiu")
                 data_send_tcp=POINT_TCP(tipus_paquet=0x32, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
                 client_tcp.send(data_send_tcp)
             client_tcp.close()
@@ -294,12 +294,16 @@ def check_get_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp):
         if data_struct_tcp.num_aleatori==client.aleatori and addr_tcp[0]==client.ip:
             data_send_tcp=POINT_TCP(tipus_paquet=0x31, nom_equip=server_config["nom"], mac_address=server_config["mac"],  num_aleatori=client.aleatori, dades=server_config["nom"]+".cfg")
             client_tcp.send(data_send_tcp)
-            file_tcp = open(client.nom + ".cfg", "r")
-            if file_tcp!=None:
+            debuger("Enviat GET_ACK")
+            exists=os.path.isfile(client.nom+".cfg")
+            if exists:
+                file_tcp = open(client.nom + ".cfg", "r")
                 for line in file_tcp:
-                    data_send_tcp=POINT_TCP(tipus_paquet=0x31, nom_equip=server_config["nom"], mac_address=server_config["mac"],  num_aleatori=client.aleatori, dades=line)
+                    debuger("Enviat GET_DATA "+line)
+                    data_send_tcp=POINT_TCP(tipus_paquet=0x34, nom_equip=server_config["nom"], mac_address=server_config["mac"],  num_aleatori=client.aleatori, dades=line)
                     client_tcp.send(data_send_tcp)
                 file_tcp.close()
+                debuger("Enviat GET_END")
                 data_send_tcp=POINT_TCP(tipus_paquet=0x35, nom_equip=server_config["nom"], mac_address=server_config["mac"],  num_aleatori=client.aleatori, dades="")
                 client_tcp.send(data_send_tcp)
             else:
