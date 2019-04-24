@@ -46,9 +46,9 @@ void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_re
 #define u   3
 #define w   4
 
-int num_reg = 0; /*Variable gloval per determinar els cops que s'ha iniciat una fase de registre*/
-int consecutive_alive = 0; /*Variable gloval per determinar els cops que s'ha iniciat una fase d'enviament d'alives*/
-char estat[20]; /*Variable gloval per a declarar l'estat en que es troba el client*/
+int num_reg = 0; 
+int consecutive_alive = 0; 
+char estat[20]; 
 int debug = 0;
 char nom_fitxer_tcp [20];
 char nom_fitxer[20];
@@ -74,6 +74,7 @@ int main(int argc, char *argv[]){
     get_parameters(argc, argv);
     /*Agafem dades del client*/
     info_client=get_config(fitxer_config,nom_fitxer);
+    
     /*Creació socket UDP*/
     debuger("Creant socket client");
     sock=socket(AF_INET,SOCK_DGRAM,0);
@@ -83,13 +84,13 @@ int main(int argc, char *argv[]){
 		perror(argv[0]);
 		exit(-1);
 	}
-    /*Binding*/
-    socket_bind(sock,argv,addr_cli);
+
     /*Agafem informació del servidor*/
     addr_server=info_server(info_client,addr_server,sock);
 
-    /*Creem procés fill per a llegir continuament de la consola*/
-
+    /*Binding*/
+    socket_bind(sock,argv,addr_cli);
+    
     while(1)
     {
             quit(buffer,fd,read_timeout,rfds,sizeof(buffer),sock);
@@ -138,7 +139,7 @@ struct config_client get_config(FILE *fitxer_config, char nom_fitxer[50])
     
     return info_client;
 }
-
+/*Retorna estructura amb informació del servidor */
 struct sockaddr_in info_server(struct config_client info_client,struct sockaddr_in	addr_server, int sock){
     struct hostent *ent = malloc(sizeof *ent);/*Informació del servidor*/
     ent=gethostbyname(info_client.id_servidor);
@@ -151,7 +152,7 @@ struct sockaddr_in info_server(struct config_client info_client,struct sockaddr_
 
     return addr_server;
 }
-
+/*Capa Superior protocol de registre*/
 struct server_register registre(int sock, struct server_register register_req, struct sockaddr_in addr_server, char *argv[], struct config_client info_client, int fdr[2])
 {
     
@@ -199,7 +200,8 @@ struct server_register registre(int sock, struct server_register register_req, s
     {
         strcpy(estat, "REGISTERED");
         write(fdr[1], estat, 20);
-        debuger("Fi del procés de registre. Estat actual: REGISTERED");
+        printf("%s\n", estat);
+        debuger("Fi del procés de registre");
     }
     /*Tractament en cas de passar nombre màxim de procesos de registre*/
     if(num_reg == q && (register_response.tipus_paquet == 0x02 || register_response.tipus_paquet == 0x00))
@@ -239,8 +241,11 @@ struct server_register register_protocol(int sock, struct server_register regist
                     fprintf(stderr,"Error al sendto\n");
                     exit(-1);
                 }
-                debuger("Petició de registre enviada. Estat actual: WAIT_REG");
-                strcpy(estat,"WAIT_REG");
+                debuger("Petició de registre enviada.");
+                if(strcmp(estat, "WAIT_REG")!=0){
+                    strcpy(estat,"WAIT_REG");
+                    printf("%s\n", estat);
+                }
                 select(sock+1, &rfds, NULL, NULL, &read_timeout);
                 if(FD_ISSET(sock, &rfds))
                 {
@@ -261,8 +266,11 @@ struct server_register register_protocol(int sock, struct server_register regist
                     exit(-1);
                 }
                 x++;
-                debuger("Petició de registre enviada. Estat actual: WAIT_REG");
-                strcpy(estat,"WAIT_REG");
+                debuger("Petició de registre enviada.");
+                if(strcmp(estat, "WAIT_REG")!=0){
+                    strcpy(estat,"WAIT_REG");
+                    printf("%s\n", estat);
+                }
                 select(sock+1, &rfds, NULL, NULL, &read_timeout);
                 if(FD_ISSET(sock, &rfds))
                 {
@@ -283,8 +291,11 @@ struct server_register register_protocol(int sock, struct server_register regist
                     fprintf(stderr,"Error al sendto\n");
                     exit(-1);
                 }
-                debuger("Petició de registre enviada. Estat actual: WAIT_REG");
-                strcpy(estat,"WAIT_REG");
+                debuger("Petició de registre enviada.");
+                if(strcmp(estat, "WAIT_REG")!=0){
+                    strcpy(estat,"WAIT_REG");
+                    printf("%s\n", estat);
+                }
                 select(sock+1, &rfds, NULL, NULL, &read_timeout);
                 if(FD_ISSET(sock, &rfds))
                 {
@@ -303,8 +314,11 @@ struct server_register register_protocol(int sock, struct server_register regist
                     fprintf(stderr,"Error al sendto\n");
                     exit(-1);
                 }
-                debuger("Petició de registre enviada. Estat actual: WAIT_REG");
-                strcpy(estat,"WAIT_REG");
+                debuger("Petició de registre enviada.");
+                if(strcmp(estat, "WAIT_REG")!=0){
+                    strcpy(estat,"WAIT_REG");
+                    printf("%s\n", estat);
+                }
                 select(sock+1, &rfds, NULL, NULL, &read_timeout);
                 if(FD_ISSET(sock, &rfds))
                 {
@@ -354,8 +368,11 @@ void alive (int sock, struct server_register register_response, struct sockaddr_
                     console_listener(buffer,fd,fdr,read_timeout,size_buffer,register_response,info_client, sizeof(nom_fitxer_tcp));   
                 }
             }
-            strcpy(estat,"ALIVE");
-            debuger("S'ha rebut una confirmació: ALIVE_ACK. Estat actual: ALIVE");
+            if(strcmp(estat,"ALIVE")!=0){
+                strcpy(estat,"ALIVE");
+                printf("%s\n", estat);
+            }
+            debuger("S'ha rebut una confirmació: ALIVE_ACK.");
             write(fdr[1], estat, 20);
             consecutive_alive=0;
         }
@@ -366,16 +383,18 @@ void alive (int sock, struct server_register register_response, struct sockaddr_
         }
         if(alive_inf.tipus_paquet==0x13)
         {
-            debuger("El servidor ha rebutjat la conexió: ALIVE_REJ. Estat actual: DISCONNECTED");
+            debuger("El servidor ha rebutjat la conexió: ALIVE_REJ.");
             strcpy(estat,"DISCONNECTED");
             write(fdr[1], estat, 20);
+            printf("%s\n", estat);
             consecutive_alive=0;
         }
         if(consecutive_alive>=u)
         {
-            debuger("No s'ha rebut resposta a 3 alives consecutius. Estat actual: DISCONNECTED");
+            debuger("No s'ha rebut resposta a 3 alives consecutius.");
             strcpy(estat,"DISCONNECTED");
             write(fdr[1], estat, 20);
+            printf("%s\n", estat);
             consecutive_alive=0;
         }
 }
@@ -531,7 +550,7 @@ void get_parameters(int argc, char *argv[]){
 /*Binding socket UDP*/
 void socket_bind(int sock, char *argv[],struct sockaddr_in addr_cli){
 
-    memset(&addr_cli,0,sizeof (struct sockaddr_in)); 
+    memset(&addr_cli,0,sizeof (struct sockaddr_in));
 	addr_cli.sin_family=AF_INET;
 	addr_cli.sin_addr.s_addr=htonl(INADDR_ANY);
 	addr_cli.sin_port=htons(0);
@@ -541,8 +560,7 @@ void socket_bind(int sock, char *argv[],struct sockaddr_in addr_cli){
 		fprintf(stderr,"No puc fer el binding del socket!!!\n");
         close(sock);
         exit(-1);
-	}
-    
+	}  
 }
 /*Tractament send-conf*/
 void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_register register_response, struct config_client info_client, 
@@ -599,6 +617,7 @@ void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_r
         debuger("No s'ha rebut resposta a SEND FILE");
     }
     /*Tractem resposta rebuda*/
+    memset(&tcp_pdu.dades,0,sizeof(tcp_pdu.dades));
     if(tcp_pdu.tipus_paquet==0x21 && strcmp(tcp_pdu.nom_equip,register_response.nom_equip)==0 && strcmp(tcp_pdu.mac_adress,register_response.mac_adress)==0){
         debuger("Rebut SEND ACK, inici d'enviament del fitxer de configuració");
         fitxer_config_tcp = fopen(nom_fitxer_tcp, "r"); 
@@ -620,6 +639,7 @@ void send_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_r
                 close(sock_tcp);
                 exit(-1);
             }
+            debuger("Enviat SEND_DATA");
         }
 
         fclose( fitxer_config_tcp );
@@ -693,13 +713,11 @@ void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_re
     select(sock_tcp+1, &rfds, NULL, NULL, &read_timeout);
     if(FD_ISSET(sock_tcp, &rfds))
     {
-        read(sock_tcp+1, &tcp_pdu,sizeof(tcp_pdu));    
+        read(sock_tcp+1, &tcp_pdu,sizeof(tcp_pdu));  
     }else{
         debuger("Passat temps màxim de resposta GET_CONF");
         close(sock_tcp);
     } 
-    printf("%s , %s",tcp_pdu.nom_equip,register_response.nom_equip);
-    printf("%s , %s",tcp_pdu.mac_adress,register_response.mac_adress);
     if(strcmp(tcp_pdu.nom_equip,register_response.nom_equip)==0 && strcmp(tcp_pdu.mac_adress,register_response.mac_adress)==0){
         if(tcp_pdu.tipus_paquet==0x31){
             debuger("Rebut GET_ACK");
@@ -713,6 +731,7 @@ void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_re
             }
         }
         fitxer_config_tcp = fopen(tcp_pdu.dades, "w+");
+        memset(&addr_server_tcp, '0', sizeof(addr_server_tcp));
         while(tcp_pdu.tipus_paquet==0x34)
         {
             select(sock_tcp+1, &rfds, NULL, NULL, &read_timeout);
@@ -735,7 +754,7 @@ void get_conf(struct server_register_tcp tcp_pdu, int sock_tcp, struct server_re
             close(sock_tcp);
         }
     }else{
-        debuger("Dades rebude errònies");
+        debuger("Dades rebudes errònies");
         close(sock_tcp);
     }     
     fclose(fitxer_config_tcp);

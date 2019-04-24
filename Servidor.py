@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding=utf-8
 #enconding: utf-8
 
@@ -18,7 +19,7 @@ j=2
 k=3
 w=4
 
-
+#Agafem la configuració del fitxer de configuració del servidor
 def server_configuration():
     fitxer_configuracio=open(nom_fitxer_serv, "r")
 
@@ -36,7 +37,7 @@ def server_configuration():
     }
 
     return server_config
-    
+#Agafem el llistat de clients que estan autoritzats per conectar-se al servidor
 def get_clients_autoritzats():
 
     fitxer_clients = open(equips_aut, "r")
@@ -46,21 +47,21 @@ def get_clients_autoritzats():
         llista_clients.append(client)
         
     return llista_clients
-
+#Convertim la PDU de c en un objecte POINT
 def data_treatment(data_struct):
     data=POINT.from_buffer_copy(data_struct)
     return data
-
+#Convertim la PDU de c en un objecte POINT_TCP
 def data_treatment_tcp(data_struct_tcp):
     data=POINT_TCP.from_buffer_copy(data_struct_tcp)
     return data
-
+#Funció per a fer debug
 def debuger(msg):
     if debug==True:
         now = datetime.datetime.now()
         time = now.strftime("%H:%M:%S")
         print(time+" DEBUG => "+msg)
-
+#Contestar les PDU que ens arriben pel canal UDP
 def reply(data, addr, clients, server_config, sock):
 
     client=check_client(data,clients)
@@ -70,7 +71,7 @@ def reply(data, addr, clients, server_config, sock):
     if data.tipus_paquet==0x10:
         debuger("PDU Rebuda: ALIVE_INF")
         check_alive(data, addr, client, server_config, sock)
-
+#Comprovar si el client és vàlid
 def check_client(data,clients):
     client=Client("0000000","0000000000000","DISCONNECTED","000000","",False,0, False)
     for c in clients:
@@ -78,7 +79,7 @@ def check_client(data,clients):
             client=c
             client.accepted=True
     return client
-
+#Time to live del primer Alive
 def ttl_registered(client):
     client.ttl_alive=client.ttl_alive+2
     time.sleep(3)
@@ -88,10 +89,11 @@ def ttl_registered(client):
 
     if client.ttl_alive==0:
         client.estat="DISCONNECTED"
+        print(client.nom+": "+client.estat)
         debuger("Pasat temps maxim d'espera d'alive")
     return 0
     
-
+#Time to live posterior al primer Alive
 def ttl_alive(client):
     client.ttl_alive=client.ttl_alive+3
     time.sleep(3)
@@ -103,9 +105,10 @@ def ttl_alive(client):
 
     if client.ttl_alive==0:
         client.estat="DISCONNECTED"
+        print(client.nom+": "+client.estat)
         debuger("Pasat temps maxim d'espera d'alive")
     return 0
-
+#Funció per respondre una petició de registre
 def check_register(data, addr, client, server_config, sock):
 
     if client.accepted==True:
@@ -119,6 +122,7 @@ def check_register(data, addr, client, server_config, sock):
                 sock.sendto(data, addr)
                 client.aleatori=str(aleatori)
                 client.estat="REGISTERED"
+                print(client.nom+": "+client.estat)
                 client.ip=addr[0]
                 t=threading.Thread(target=ttl_registered, args=(client,))
                 t.daemon=True
@@ -141,8 +145,9 @@ def check_register(data, addr, client, server_config, sock):
         data=POINT(tipus_paquet=0x03, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Equip no autoritzat")
         sock.sendto(data,addr)
         client.estat="DISCONNECTED"
+        print(client.nom+": "+client.estat)
 
-
+#Funció per respondre a un ALIVE INF
 def check_alive(data, addr, client, server_config, sock):
 
     if client.estat=="ALIVE" or client.estat=="REGISTERED":
@@ -151,7 +156,9 @@ def check_alive(data, addr, client, server_config, sock):
                 debuger("Les dades concorden, enviant ALIVE_ACK")
                 data=POINT(tipus_paquet=0x11, nom_equip=server_config["nom"], mac_address=server_config["mac"],  num_aleatori=client.aleatori, dades=server_config["tcp_port"])
                 sock.sendto(data, addr)
-                client.estat="ALIVE"
+                if client.estat!="ALIVE":
+                    client.estat="ALIVE"
+                    print(client.nom+": "+client.estat)
                 t=threading.Thread(target=ttl_alive, args=(client,))
                 t.daemon=True
                 t.start()
@@ -163,11 +170,14 @@ def check_alive(data, addr, client, server_config, sock):
             data=POINT(tipus_paquet=0x13, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Equip no autoritzat")
             sock.sendto(data,addr)
             client.estat="DISCONNECTED"
+            print(client.nom+": "+client.estat)
     else:
         debuger("Client no autoritzat, enviant ALIVE_REJ")
         data=POINT(tipus_paquet=0x13, nom_equip="0000000", mac_address="0000000000000",  num_aleatori="000000", dades="Client no autoritzat")
+        client.estat="DISCONNECTED"
+        print(client.nom+": "+client.estat)
         sock.sendto(data,addr)
-        
+#Escoltar per consola       
 def listen(clients):
     debuger("Escoltant Comandes")
     quit = False
@@ -182,7 +192,7 @@ def listen(clients):
     sock.close()
     sock_tcp.close()
     os._exit(1)
-    
+#Crear la llista de clients del servidor   
 def make_list(clients):
     cap=("-Nom-", "-Mac-", "-Estat-", "-IP-", "-Aleatori-")
     print '{0:<0} {1:>11} {2:>15} {3:>15} {4:>20}'.format(*cap)
@@ -194,21 +204,21 @@ def make_list(clients):
             row_client= (client.nom,client.mac,client.estat,client.ip,client.aleatori)
             print '{0:<0} {1:>15} {2:>15} {3:>14} {4:>15}'.format(*row_client)
             
-
+#Estructura c UDP
 class POINT (Structure):
     _fields_ = [("tipus_paquet",c_ubyte),
                 ("nom_equip",c_char*7),
                 ("mac_address",c_char*13),
                 ("num_aleatori",c_char*7),
                 ("dades",c_char*50)]
-
+#Estructura c TCP
 class POINT_TCP (Structure):
     _fields_ = [("tipus_paquet",c_ubyte),
                 ("nom_equip",c_char*7),
                 ("mac_address",c_char*13),
                 ("num_aleatori",c_char*7),
                 ("dades",c_char*150)]
-
+#Objecte Client on guardarem les dades de cada client
 class Client:
     def __init__(self,nom,mac,estat,aleatori,ip,accepted,ttl_alive,tcp_active):
         self.nom=nom
@@ -220,7 +230,7 @@ class Client:
         self.ttl_alive=ttl_alive
         self.tcp_active=tcp_active
 
-
+#Contestar a PDU's rebudes per el canal TCP
 def reply_tcp(sock_tcp,clients,server_config):
     #Agafem dades del canal TCP
     client_tcp,addr_tcp = sock_tcp.accept()
@@ -235,8 +245,6 @@ def reply_tcp(sock_tcp,clients,server_config):
             client.tcp_active==False
         else:
             if(data_struct_tcp.tipus_paquet==0x20):
-                print(data_struct_tcp.nom_equip)
-                print(data_struct_tcp.mac_address)
                 debuger("Enviat SEND_NACK, aquest client ja té el port tcp actiu")
                 data_send_tcp=POINT_TCP(tipus_paquet=0x22, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades addiccional errònies")
                 client_tcp.send(data_send_tcp)
@@ -246,20 +254,27 @@ def reply_tcp(sock_tcp,clients,server_config):
                 client_tcp.send(data_send_tcp)
             client_tcp.close()
     else:
-        debuger("Dades principals errònies")
-        data_send_tcp=POINT_TCP(tipus_paquet=0x23, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades principals errònies")
-        client_tcp.send(data_send_tcp)
-        debuger("Enviar SEND_REJ")
-        client_tcp.close()
+        if(data_struct_tcp.tipus_paquet==0x20):
+            debuger("Dades principals errònies")
+            data_send_tcp=POINT_TCP(tipus_paquet=0x23, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades principals errònies")
+            client_tcp.send(data_send_tcp)
+            debuger("Enviar SEND_REJ")
+            client_tcp.close()
+        if(data_struct_tcp.tipus_paquet==0x30):
+            debuger("Dades principals errònies")
+            data_send_tcp=POINT_TCP(tipus_paquet=0x33, nom_equip="", mac_address="0000000000000",  num_aleatori="000000", dades="Dades principals errònies")
+            client_tcp.send(data_send_tcp)
+            debuger("Enviar SEND_REJ")
+            client_tcp.close()
     return 0
-
+#Comprovar quina petició esta fent el client
 def check_tcp_pdu(data_struct_tcp,client,client_tcp,server_config,addr_tcp,sock_tcp):
     if(data_struct_tcp.tipus_paquet==0x20):
         check_send_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp,sock_tcp)
     if(data_struct_tcp.tipus_paquet==0x30):
         check_get_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp)
         
-
+#Funció per respondre a un SEND_CONF
 def check_send_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp,sock_tcp):
     if data_struct_tcp.nom_equip==client.nom and data_struct_tcp.mac_address==client.mac:
         if data_struct_tcp.num_aleatori==client.aleatori and addr_tcp[0]==client.ip:
@@ -287,7 +302,7 @@ def check_send_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp,soc
         client_tcp.send(data_send_tcp)
         debuger("Enviar SEND_REJ")
         client_tcp.close()
-
+#Funció per respondre un GET_CONF
 def check_get_conf(data_struct_tcp,client,client_tcp,server_config,addr_tcp):
 
     if data_struct_tcp.nom_equip==client.nom and data_struct_tcp.mac_address==client.mac:
